@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetLab Inventory | Sistem Inventaris Perangkat Jaringan & Lab IoT</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#172033',
+                            900: '#0f172a',
+                            950: '#020617',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for clean technical look */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+        }
+        .network-grid-bg {
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col network-grid-bg">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+    <!-- Custom Confirmation Modal (Replaces window.confirm) -->
+    <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 transform transition-all">
+            <div class="flex items-center gap-3 text-rose-600 mb-3">
+                <div class="p-2.5 bg-rose-100 rounded-xl">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-900" id="confirm-title">Konfirmasi Hapus</h3>
+            </div>
+            <p class="text-slate-600 text-sm leading-relaxed mb-6" id="confirm-message">
+                Apakah Anda yakin ingin menghapus perangkat ini dari database cloud? Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div class="flex justify-end gap-3">
+                <button id="confirm-cancel-btn" class="px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                    Batal
+                </button>
+                <button id="confirm-ok-btn" class="px-4 py-2.5 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-sm transition flex items-center gap-1.5">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Ya, Hapus
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Borrow / Status Modal -->
+    <div id="status-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2.5">
+                    <div class="p-2 bg-blue-100 text-blue-600 rounded-xl">
+                        <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-900">Perbarui Status Perangkat</h3>
+                </div>
+                <button onclick="closeStatusModal()" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <form id="status-update-form" class="space-y-4">
+                <input type="hidden" id="edit-device-id">
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <p class="text-xs text-slate-500 font-medium">Perangkat Terpilih</p>
+                    <p class="text-sm font-bold text-slate-900" id="edit-device-name">-</p>
+                    <p class="text-xs font-mono text-slate-500 mt-0.5" id="edit-device-serial">-</p>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">Status Baru</label>
+                    <select id="edit-device-status" class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        <option value="Tersedia">🟢 Tersedia (Siap Pakai)</option>
+                        <option value="Dipinjam">🟡 Dipinjam (Praktikum/Riset)</option>
+                        <option value="Rusak">🔴 Rusak / Maintenance</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">Nama Peminjam / Keterangan</label>
+                    <input type="text" id="edit-device-note" placeholder="Contoh: Budi (NIM 22541001) - Lab Jarkom 2" 
+                        class="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                </div>
+
+                <div class="flex justify-end gap-2.5 pt-2">
+                    <button type="button" onclick="closeStatusModal()" class="px-4 py-2.5 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                        Batal
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-sm transition flex items-center gap-1.5">
+                        <i data-lucide="check" class="w-4 h-4"></i> Simpan Perubahan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-40 bg-slate-900 text-white border-b border-slate-800 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3.5 gap-3">
+                <!-- Brand Identity -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center shadow-md shadow-blue-500/20">
+                            <i data-lucide="network" class="w-6 h-6 text-white"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h1 class="text-lg font-extrabold tracking-tight text-white">NetLab <span class="text-emerald-400">Inventory</span></h1>
+                                <span class="hidden md:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                    CLOUD v1.0
+                                </span>
+                            </div>
+                            <p class="text-xs text-slate-400">Sistem Inventaris Perangkat Jaringan & Lab IoT • UTDI</p>
+                        </div>
+                    </div>
+
+                    <!-- Cloud Connection Indicator (Mobile) -->
+                    <div id="cloud-status-mobile" class="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse" id="status-dot-mobile"></span>
+                        <span class="text-slate-300 font-mono text-[11px]" id="status-text-mobile">Sync...</span>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs & Cloud Status -->
+                <div class="flex items-center justify-between sm:justify-end gap-3">
+                    <nav class="flex bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 w-full sm:w-auto">
+                        <button onclick="switchTab('inventory')" id="tab-btn-inventory" 
+                            class="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-blue-600 text-white shadow">
+                            <i data-lucide="server" class="w-4 h-4"></i>
+                            <span>Inventaris Lab</span>
+                        </button>
+                        <button onclick="switchTab('architecture')" id="tab-btn-architecture" 
+                            class="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-300 hover:text-white">
+                            <i data-lucide="cloud-cog" class="w-4 h-4 text-emerald-400"></i>
+                            <span>Arsitektur & Analisis UTS</span>
+                        </button>
+                    </nav>
+
+                    <!-- Cloud Connection Indicator (Desktop) -->
+                    <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-xs" title="Status Koneksi Real-time Database Cloud">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" id="status-dot"></span>
+                        <span class="text-slate-300 font-mono text-xs" id="status-text">Menghubungkan...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT CONTAINER -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
+        <!-- ===================================================================== -->
+        <!-- TAB 1: APLIKASI INVENTARIS LAB (DASHBOARD, FORM, DAFTAR PERANGKAT)    -->
+        <!-- ===================================================================== -->
+        <section id="view-inventory" class="space-y-6">
+            
+            <!-- Dashboard Summary Cards -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
+                <!-- Total Perangkat -->
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm hover:shadow-md transition relative overflow-hidden">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Perangkat</p>
+                            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1" id="stat-total">0</h2>
+                            <p class="text-xs text-slate-400 mt-1">Tercatat di Cloud</p>
+                        </div>
+                        <div class="p-2.5 bg-slate-100 text-slate-700 rounded-xl">
+                            <i data-lucide="hard-drive" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tersedia -->
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-200/80 shadow-sm hover:shadow-md transition relative overflow-hidden">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-emerald-700">Tersedia</p>
+                            <h2 class="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-1" id="stat-available">0</h2>
+                            <p class="text-xs text-emerald-600/80 mt-1">Siap Praktikum</p>
+                        </div>
+                        <div class="p-2.5 bg-emerald-100 text-emerald-600 rounded-xl">
+                            <i data-lucide="check-circle-2" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dipinjam -->
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-amber-200/80 shadow-sm hover:shadow-md transition relative overflow-hidden">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-amber-700">Dipinjam</p>
+                            <h2 class="text-2xl sm:text-3xl font-extrabold text-amber-600 mt-1" id="stat-borrowed">0</h2>
+                            <p class="text-xs text-amber-600/80 mt-1">Digunakan Mahasiswa</p>
+                        </div>
+                        <div class="p-2.5 bg-amber-100 text-amber-600 rounded-xl">
+                            <i data-lucide="users" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rusak / Maintenance -->
+                <div class="bg-white rounded-2xl p-4 sm:p-5 border border-rose-200/80 shadow-sm hover:shadow-md transition relative overflow-hidden">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-xs font-semibold uppercase tracking-wider text-rose-700">Maintenance</p>
+                            <h2 class="text-2xl sm:text-3xl font-extrabold text-rose-600 mt-1" id="stat-broken">0</h2>
+                            <p class="text-xs text-rose-600/80 mt-1">Perlu Perbaikan</p>
+                        </div>
+                        <div class="p-2.5 bg-rose-100 text-rose-600 rounded-xl">
+                            <i data-lucide="wrench" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Workspace: Left Column (Form) & Right Column (Inventory List) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                <!-- LEFT: Form Tambah Perangkat Jaringan/IoT -->
+                <div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="bg-slate-900 px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                        <div class="flex items-center gap-2.5">
+                            <div class="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg">
+                                <i data-lucide="plus-circle" class="w-5 h-5"></i>
+                            </div>
+                            <h2 class="text-sm font-bold text-white tracking-wide">Registrasi Perangkat Baru</h2>
+                        </div>
+                        <span class="text-[11px] font-mono text-slate-400">CREATE</span>
+                    </div>
+
+                    <form id="add-device-form" class="p-5 space-y-4">
+                        <!-- Nama Perangkat -->
+                        <div>
+                            <label for="device-name" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Nama Perangkat <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="text" id="device-name" required placeholder="Contoh: MikroTik RB941-2nD hAP lite"
+                                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        </div>
+
+                        <!-- Kategori -->
+                        <div>
+                            <label for="device-category" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Kategori Perangkat <span class="text-rose-500">*</span>
+                            </label>
+                            <select id="device-category" required
+                                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                                <option value="Router">🌐 Router</option>
+                                <option value="Switch">🔀 Switch</option>
+                                <option value="Access Point">📡 Access Point</option>
+                                <option value="Microcontroller ESP32">📟 Microcontroller ESP32</option>
+                                <option value="Sensor">🌡️ Sensor IoT</option>
+                                <option value="Kabel">🔌 Kabel & Konektor</option>
+                            </select>
+                        </div>
+
+                        <!-- Nomor Seri / MAC Address -->
+                        <div>
+                            <label for="device-serial" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Nomor Seri / MAC Address <span class="text-rose-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <input type="text" id="device-serial" required placeholder="Contoh: SN-MK2026-01 / 48:A9:8A:12:34:56"
+                                    class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                            </div>
+                        </div>
+
+                        <!-- Lokasi Rak / Lab -->
+                        <div>
+                            <label for="device-location" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Lokasi Rak / Laboratorium <span class="text-rose-500">*</span>
+                            </label>
+                            <input type="text" id="device-location" required placeholder="Contoh: Rak A2 - Lab Jaringan Komputer"
+                                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        </div>
+
+                        <!-- Status Awal -->
+                        <div>
+                            <label for="device-status" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Status Perangkat <span class="text-rose-500">*</span>
+                            </label>
+                            <select id="device-status" required
+                                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                                <option value="Tersedia">🟢 Tersedia</option>
+                                <option value="Dipinjam">🟡 Dipinjam</option>
+                                <option value="Rusak">🔴 Rusak / Maintenance</option>
+                            </select>
+                        </div>
+
+                        <!-- Peminjam / Keterangan -->
+                        <div>
+                            <label for="device-note" class="block text-xs font-semibold text-slate-700 mb-1">
+                                Peminjam / Keterangan Tambahan
+                            </label>
+                            <input type="text" id="device-note" placeholder="Contoh: Siap pakai / Dipinjam Andi (TI-3)"
+                                class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                        </div>
+
+                        <button type="submit" id="submit-btn"
+                            class="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white font-semibold text-sm rounded-xl shadow-md shadow-blue-600/20 transition flex items-center justify-center gap-2 cursor-pointer">
+                            <i data-lucide="cloud-upload" class="w-4 h-4"></i>
+                            <span>Simpan ke Cloud Database</span>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- RIGHT: Daftar Inventaris (Search, Filter, Table/Cards) -->
+                <div class="lg:col-span-8 space-y-4">
+                    
+                    <!-- Filter & Search Control Bar -->
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                        <div class="flex flex-col sm:flex-row gap-3">
+                            <!-- Real-time Search -->
+                            <div class="relative flex-1">
+                                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                                <input type="text" id="search-input" placeholder="Cari nama perangkat, MAC/SN, lokasi, atau peminjam..."
+                                    class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                            </div>
+
+                            <!-- Filter Kategori -->
+                            <select id="filter-category"
+                                class="px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                                <option value="ALL">Semua Kategori</option>
+                                <option value="Router">Router</option>
+                                <option value="Switch">Switch</option>
+                                <option value="Access Point">Access Point</option>
+                                <option value="Microcontroller ESP32">Microcontroller ESP32</option>
+                                <option value="Sensor">Sensor</option>
+                                <option value="Kabel">Kabel</option>
+                            </select>
+
+                            <!-- Filter Status -->
+                            <select id="filter-status"
+                                class="px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                                <option value="ALL">Semua Status</option>
+                                <option value="Tersedia">Tersedia</option>
+                                <option value="Dipinjam">Dipinjam</option>
+                                <option value="Rusak">Rusak / Maintenance</option>
+                            </select>
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs text-slate-500">
+                            <div class="flex items-center gap-2">
+                                <span>Menampilkan <strong class="text-slate-800" id="showing-count">0</strong> perangkat</span>
+                                <button id="reset-filter-btn" onclick="resetFilters()" class="hidden text-blue-600 hover:underline font-medium">
+                                    Reset Filter
+                                </button>
+                            </div>
+                            <button onclick="seedSampleData(true)" class="inline-flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg font-medium transition">
+                                <i data-lucide="database-zap" class="w-3.5 h-3.5"></i>
+                                <span>Muat Data Contoh Lab</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading Skeleton -->
+                    <div id="loading-state" class="bg-white rounded-2xl border border-slate-200 p-10 text-center">
+                        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 mb-3 animate-spin">
+                            <i data-lucide="loader-2" class="w-6 h-6"></i>
+                        </div>
+                        <p class="text-sm font-semibold text-slate-800">Menyinkronkan Data dari Cloud Firestore...</p>
+                        <p class="text-xs text-slate-500 mt-1">Mengambil daftar inventaris laboratorium secara real-time</p>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="empty-state" class="hidden bg-white rounded-2xl border border-slate-200 p-10 text-center">
+                        <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 mb-3">
+                            <i data-lucide="inbox" class="w-7 h-7"></i>
+                        </div>
+                        <h3 class="text-base font-bold text-slate-800">Tidak Ada Perangkat Ditemukan</h3>
+                        <p class="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
+                            Belum ada data perangkat yang sesuai dengan filter pencarian Anda, atau database masih kosong.
+                        </p>
+                        <button onclick="seedSampleData(true)" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm transition">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                            <span>Isi Otomatis 6 Perangkat Contoh</span>
+                        </button>
+                    </div>
+
+                    <!-- Desktop Table View -->
+                    <div id="table-container" class="hidden md:block bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-900 text-slate-300 text-[11px] font-semibold uppercase tracking-wider">
+                                        <th class="py-3.5 px-4">Perangkat & Kategori</th>
+                                        <th class="py-3.5 px-4">Serial / MAC & Lokasi</th>
+                                        <th class="py-3.5 px-4">Status</th>
+                                        <th class="py-3.5 px-4">Peminjam / Ket.</th>
+                                        <th class="py-3.5 px-4 text-right">Aksi Cepat</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="inventory-table-body" class="divide-y divide-slate-100 text-sm">
+                                    <!-- Rows rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Mobile / Tablet Card View -->
+                    <div id="cards-container" class="md:hidden space-y-3">
+                        <!-- Cards rendered dynamically -->
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- ===================================================================== -->
+        <!-- TAB 2: DOKUMENTASI ARSITEKTUR CLOUD & JAWABAN 5 ANALISIS UTS          -->
+        <!-- ===================================================================== -->
+        <section id="view-architecture" class="hidden space-y-8">
+            
+            <!-- Header Banner -->
+            <div class="bg-gradient-to-br from-slate-900 via-slate-850 to-blue-950 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-slate-800 relative overflow-hidden">
+                <div class="relative z-10 max-w-3xl">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold mb-3">
+                        <i data-lucide="graduation-cap" class="w-4 h-4"></i>
+                        <span>Dokumentasi UTS • Komputasi Paralel pada Cloud Computing</span>
+                    </div>
+                    <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Arsitektur Cloud & Analisis Sistem NetLab Inventory</h2>
+                    <p class="text-slate-300 text-sm sm:text-base mt-2 leading-relaxed">
+                        Halaman ini merangkum arsitektur deployment aplikasi web berbasis cloud serta 5 poin analisis teknis (Sub-CPMK 1 s/d 4) sebagai bahan demonstrasi dan presentasi UTS.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Visual Diagram Arsitektur Cloud (SVG + Interactive Cards) -->
+            <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm">
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-6">
+                    <div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-blue-600">Sub-CPMK-2 • Topologi Sistem</span>
+                        <h3 class="text-xl font-bold text-slate-900">Diagram Arsitektur & Alur Komunikasi Cloud</h3>
+                    </div>
+                    <span class="px-3 py-1 bg-slate-100 text-slate-700 font-mono text-xs rounded-lg border border-slate-200">
+                        HTTPS / TLS 1.3 + WebSocket Real-time
+                    </span>
+                </div>
+
+                <!-- Interactive Architecture Diagram -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center bg-slate-50 p-6 rounded-2xl border border-slate-200/80">
+                    
+                    <!-- Node 1: Client / Pengguna -->
+                    <div class="bg-white p-5 rounded-2xl border-2 border-slate-300 shadow-sm relative">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="p-2.5 bg-slate-900 text-white rounded-xl">
+                                <i data-lucide="laptop" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-mono uppercase text-slate-500 font-bold">1. Client Layer</span>
+                                <h4 class="font-bold text-slate-900 text-sm">Pengguna (Browser)</h4>
+                            </div>
+                        </div>
+                        <ul class="text-xs text-slate-600 space-y-1.5">
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i> Laboran, Dosen & Mahasiswa</li>
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i> Akses via Laptop / Smartphone</li>
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i> Single Page App (HTML5/JS/Tailwind)</li>
+                        </ul>
+                    </div>
+
+                    <!-- Node 2: Hosting & Edge Network (Vercel) -->
+                    <div class="bg-white p-5 rounded-2xl border-2 border-blue-500 shadow-md relative">
+                        <div class="absolute -top-3 right-4 px-2.5 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full">
+                            PaaS / Edge CDN
+                        </div>
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="p-2.5 bg-blue-600 text-white rounded-xl">
+                                <i data-lucide="globe" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-mono uppercase text-blue-600 font-bold">2. Compute & Network</span>
+                                <h4 class="font-bold text-slate-900 text-sm">Vercel Cloud Hosting</h4>
+                            </div>
+                        </div>
+                        <ul class="text-xs text-slate-600 space-y-1.5">
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-blue-500"></i> Global Edge CDN & Auto SSL</li>
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-blue-500"></i> Serverless Static Delivery</li>
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-blue-500"></i> URL Publik: <code class="bg-slate-100 px-1 rounded">*.vercel.app</code></li>
+                        </ul>
+                    </div>
+
+                    <!-- Node 3: BaaS & Persistent Storage (Firebase) -->
+                    <div class="bg-white p-5 rounded-2xl border-2 border-emerald-500 shadow-md relative">
+                        <div class="absolute -top-3 right-4 px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-bold rounded-full">
+                            BaaS / Managed DB
+                        </div>
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="p-2.5 bg-emerald-600 text-white rounded-xl">
+                                <i data-lucide="database" class="w-6 h-6"></i>
+                            </div>
+                            <div>
+                                <span class="text-[10px] font-mono uppercase text-emerald-600 font-bold">3. Storage & Auth Layer</span>
+                                <h4 class="font-bold text-slate-900 text-sm">Google Firebase</h4>
+                            </div>
+                        </div>
+                        <ul class="text-xs text-slate-600 space-y-1.5">
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i> <strong>Cloud Firestore:</strong> NoSQL Real-time</li>
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i> <strong>Firebase Auth:</strong> Session Security</li>
+                            <li class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-500"></i> Replikasi multi-zona otomatis</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Data Flow Summary -->
+                <div class="mt-4 p-4 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-slate-700 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <i data-lucide="info" class="w-5 h-5 text-blue-600 shrink-0"></i>
+                    <p>
+                        <strong>Alur Eksekusi:</strong> Pengguna mengakses URL publik melalui HTTPS ke <strong>Vercel Edge Network</strong> untuk mengunduh antarmuka web. Selanjutnya, Firebase SDK di sisi klien membuka koneksi persisten terenkripsi langsung ke <strong>Cloud Firestore</strong> untuk operasi CRUD (Create, Read, Update, Delete) secara <em>real-time</em> tanpa perlu mengelola server VM manual.
+                    </p>
+                </div>
+            </div>
+
+            <!-- 5 Jawaban Pertanyaan Analisis UTS -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                <!-- 1. Identifikasi Layanan Cloud -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center">1</span>
+                        <h3 class="font-bold text-slate-900 text-base">Identifikasi Model Layanan Cloud</h3>
+                    </div>
+                    <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        Aplikasi ini menggunakan kombinasi model <strong>PaaS (Platform as a Service)</strong> dan <strong>BaaS (Backend as a Service)</strong>:
+                    </p>
+                    <ul class="text-xs sm:text-sm text-slate-600 space-y-2 list-disc pl-5">
+                        <li><strong>Vercel (PaaS / Edge Hosting):</strong> Menyediakan platform deployment otomatis dari kode sumber ke jaringan CDN global lengkap dengan sertifikat SSL/TLS tanpa konfigurasi OS atau web server (Nginx/Apache).</li>
+                        <li><strong>Google Firebase Firestore & Auth (BaaS):</strong> Menyediakan database NoSQL terkelola dan autentikasi siap pakai melalui SDK.</li>
+                        <li><strong>Alasan Pemilihan:</strong> Mempercepat pengembangan, bebas biaya pemeliharaan infrastruktur (<em>serverless</em>), serta memiliki skalabilitas otomatis.</li>
+                    </ul>
+                </div>
+
+                <!-- 2. Identifikasi Komponen Cloud -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center">2</span>
+                        <h3 class="font-bold text-slate-900 text-base">Identifikasi Komponen Cloud</h3>
+                    </div>
+                    <ul class="text-xs sm:text-sm text-slate-600 space-y-2 list-disc pl-5">
+                        <li><strong>Komputasi (Compute):</strong> Serverless Edge Execution di Vercel untuk mendistribusikan aset aplikasi dan eksekusi logika client-side pada browser pengguna.</li>
+                        <li><strong>Penyimpanan Data (Storage):</strong> Cloud Firestore (NoSQL Document Database) menyimpan koleksi data perangkat (nama, kategori, MAC/SN, lokasi rak, status, dan peminjam) secara persisten.</li>
+                        <li><strong>Jaringan (Networking):</strong> Anycast Global CDN, DNS routing otomatis, protokol HTTPS (port 443), dan WebSocket real-time listener (<code>onSnapshot</code>).</li>
+                    </ul>
+                </div>
+
+                <!-- 3. Analisis Kebutuhan Aplikasi -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center justify-center">3</span>
+                        <h3 class="font-bold text-slate-900 text-base">Analisis Kebutuhan Aplikasi</h3>
+                    </div>
+                    <ul class="text-xs sm:text-sm text-slate-600 space-y-2 list-disc pl-5">
+                        <li><strong>Target Pengguna:</strong> Kepala Laboratorium, Asisten Praktikum (Laboran), Dosen pengampu mata kuliah jaringan/IoT, serta mahasiswa peminjam alat.</li>
+                        <li><strong>Jenis Data yang Diolah:</strong> Data terstruktur/semi-terstruktur berupa identitas perangkat keras (Router, Switch, AP, ESP32, Sensor, Kabel), nomor seri/MAC, lokasi rak, dan log status peminjaman.</li>
+                        <li><strong>Perkiraan Beban Pengguna:</strong> Rata-rata 10–40 pengguna aktif harian (saat jam praktikum berlangsung) dengan ukuran dokumen kecil (&lt; 1 KB per perangkat).</li>
+                    </ul>
+                </div>
+
+                <!-- 4. Analisis Kapasitas dan Biaya -->
+                <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-xl bg-emerald-600 text-white font-bold text-sm flex items-center justify-center">4</span>
+                        <h3 class="font-bold text-slate-900 text-base">Analisis Kapasitas, Biaya & Skala 100 User</h3>
+                    </div>
+                    <ul class="text-xs sm:text-sm text-slate-600 space-y-2 list-disc pl-5">
+                        <li><strong>Paket & Biaya:</strong> Menggunakan paket gratis (<strong>Free Tier / Spark Plan</strong>) dengan biaya <strong>Rp 0/bulan</strong>. Batas Firebase Spark: 1 GiB penyimpanan, 50.000 operasi baca/hari, 20.000 tulis/hari. Vercel Hobby: 100 GB bandwidth/bulan.</li>
+                        <li><strong>Simulasi 100 Pengguna Bersamaan:</strong> Jika 100 user mengakses bersamaan dan melakukan rata-rata 15 kali baca/filter, total operasi hanya ~1.500 reads (masih 3% dari kuota harian 50.000 reads). Aplikasi tetap berjalan lancar tanpa <em>downtime</em> berkat elastisitas otomatis cloud.</li>
+                    </ul>
+                </div>
+
+            </div>
+
+            <!-- 5. Evaluasi Pemilihan Layanan (Comparison Table) -->
+            <div class="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm">
+                <div class="flex items-center gap-2.5 mb-4">
+                    <span class="w-8 h-8 rounded-xl bg-slate-900 text-white font-bold text-sm flex items-center justify-center">5</span>
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Evaluasi & Perbandingan Platform Cloud</h3>
+                        <p class="text-xs text-slate-500">Perbandingan arsitektur terpilih (Vercel + Firebase) vs Alternatif (AWS EC2 IaaS & Render + PostgreSQL)</p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 border-b border-slate-200">
+                                <th class="py-3 px-4 font-bold">Aspek Evaluasi</th>
+                                <th class="py-3 px-4 font-bold text-blue-700 bg-blue-50/60">Vercel + Firebase (Pilihan)</th>
+                                <th class="py-3 px-4 font-bold">AWS EC2 + MySQL (IaaS)</th>
+                                <th class="py-3 px-4 font-bold">Render + Supabase</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 text-slate-600">
+                            <tr>
+                                <td class="py-3 px-4 font-semibold text-slate-800">Kemudahan Deployment</td>
+                                <td class="py-3 px-4 bg-blue-50/30 font-medium text-slate-800">Sangat Mudah (Git push / instant deploy, auto HTTPS)</td>
+                                <td class="py-3 px-4">Kompleks (Setup VM Linux, SSH, Nginx, Firewall, SSL manual)</td>
+                                <td class="py-3 px-4">Mudah (Namun backend free tier mengalami cold-start/sleep)</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 px-4 font-semibold text-slate-800">Kapasitas & Elastisitas</td>
+                                <td class="py-3 px-4 bg-blue-50/30">Auto-scaling CDN & real-time sync tanpa cold-start</td>
+                                <td class="py-3 px-4">Kapasitas tetap (t2.micro 1 vCPU, 1GB RAM), perlu scaling manual</td>
+                                <td class="py-3 px-4">500MB DB gratis, jeda bangun ~30 detik jika idle</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 px-4 font-semibold text-slate-800">Biaya Operasional</td>
+                                <td class="py-3 px-4 bg-blue-50/30 text-emerald-700 font-semibold">Gratis permanen (Free Tier) tanpa kartu kredit</td>
+                                <td class="py-3 px-4">Gratis 12 bulan pertama, wajib kartu kredit, berbayar setelahnya</td>
+                                <td class="py-3 px-4">Gratis dengan batasan jam aktif & jeda tidur server</td>
+                            </tr>
+                            <tr>
+                                <td class="py-3 px-4 font-semibold text-slate-800">Kesesuaian Kebutuhan</td>
+                                <td class="py-3 px-4 bg-blue-50/30">Sangat ideal untuk aplikasi inventaris kampus ringan & real-time</td>
+                                <td class="py-3 px-4">Over-engineering untuk skala aplikasi inventaris lab sederhana</td>
+                                <td class="py-3 px-4">Cocok, namun latensi awal lebih lambat dibanding Edge CDN</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-5 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+            <div class="flex items-center gap-2">
+                <i data-lucide="cpu" class="w-4 h-4 text-blue-600"></i>
+                <span><strong>NetLab Inventory</strong> • Proyek UTS Komputasi Paralel pada Cloud Computing (UTDI 2026)</span>
+            </div>
+            <div class="font-mono text-[11px] text-slate-400">
+                Session UID: <span id="footer-uid">initializing...</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ===================================================================== -->
+    <!-- FIREBASE CLOUD SDK & APPLICATION LOGIC                                -->
+    <!-- ===================================================================== -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, 
+            onSnapshot, serverTimestamp 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 1. Konfigurasi Firebase dari Environment Global
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'netlab-inventory-utdi';
+        let firebaseConfig = {
+          apiKey: "AIzaSyCvdOy3sKunyKYTfnUnjqMrf0yUTBXNVLM",
+          authDomain: "netlab-75b6e.firebaseapp.com",
+          projectId: "netlab-75b6e",
+          storageBucket: "netlab-75b6e.firebasestorage.app",
+          messagingSenderId: "73756789662",
+          appId: "1:73756789662:web:9660f22831d2abe06c648f"
+        };
+        try {
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                firebaseConfig = JSON.parse(__firebase_config);
+            }
+        } catch (e) {
+            console.error("Gagal mem-parsing konfigurasi Firebase:", e);
+        }
+
+        // State Aplikasi
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let devicesList = [];
+        let unsubscribeSnapshot = null;
+        let isSeedAttempted = false;
+
+        // Data Contoh Awal untuk Laboratorium Jaringan & IoT
+        const SAMPLE_DEVICES = [
+            {
+                name: "MikroTik RouterBOARD RB4011iGS+RM",
+                category: "Router",
+                serial: "SN-MK4011-8891 / DC:2C:6E:11:2A:01",
+                location: "Rak Utama A1 - Lab Jaringan Komputer",
+                status: "Tersedia",
+                note: "Router core praktikum routing BGP/OSPF"
+            },
+            {
+                name: "Cisco Catalyst 2960-X 24-Port Gigabit",
+                category: "Switch",
+                serial: "SN-CSC2960-4410 / 00:1B:54:9C:88:12",
+                location: "Rak Utama A2 - Lab Jaringan Komputer",
+                status: "Tersedia",
+                note: "Switch manageable untuk konfigurasi VLAN & Trunking"
+            },
+            {
+                name: "Ubiquiti UniFi 6 Lite (Wi-Fi 6)",
+                category: "Access Point",
+                serial: "SN-U6L-7721 / 74:83:C2:45:90:EF",
+                location: "Lemari B1 - Lab Wireless & Mobile",
+                status: "Dipinjam",
+                note: "Dipinjam Kelompok 3 (Rizky - NIM 235410042) untuk uji roaming"
+            },
+            {
+                name: "ESP32 DevKit V1 Wi-Fi + Bluetooth Dual Core",
+                category: "Microcontroller ESP32",
+                serial: "BATCH-ESP32-12 / A4:CF:12:7B:33:90",
+                location: "Box IoT #04 - Lab Embedded & IoT",
+                status: "Tersedia",
+                note: "Lengkap dengan kabel Micro-USB data"
+            },
+            {
+                name: "Sensor Suhu & Kelembaban DHT22 + Soil Moisture",
+                category: "Sensor",
+                serial: "SNS-IOT-2026-09",
+                location: "Box IoT #07 - Lab Embedded & IoT",
+                status: "Dipinjam",
+                note: "Dipinjam Siti Aminah (Skripsi Smart Greenhouse)"
+            },
+            {
+                name: "Kabel Patch Cord UTP Cat6 Belden 3 Meter (Pack 10)",
+                category: "Kabel",
+                serial: "KBL-CAT6-B03",
+                location: "Rak C3 - Gudang Peralatan Jaringan",
+                status: "Rusak",
+                note: "2 konektor RJ45 patah, perlu crimping ulang"
+            }
+        ];
+
+        // Render Ikon Lucide Awal
+        lucide.createIcons();
+
+        // 2. Fungsi Toast Notification
+        window.showToast = function(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const styles = {
+                success: 'bg-slate-900 text-white border-emerald-500',
+                error: 'bg-rose-950 text-white border-rose-500',
+                info: 'bg-slate-900 text-white border-blue-500'
+            };
+            const icons = {
+                success: 'check-circle-2',
+                error: 'alert-circle',
+                info: 'info'
+            };
+            const iconColors = {
+                success: 'text-emerald-400',
+                error: 'text-rose-400',
+                info: 'text-blue-400'
+            };
+
+            toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3.5 rounded-2xl shadow-xl border-l-4 ${styles[type] || styles.info} transform transition-all duration-300 translate-y-2 opacity-0`;
+            toast.innerHTML = `
+                <i data-lucide="${icons[type] || icons.info}" class="w-5 h-5 shrink-0 ${iconColors[type] || iconColors.info}"></i>
+                <p class="text-xs sm:text-sm font-medium leading-snug">${message}</p>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons({ root: toast });
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        };
+
+        // 3. Update Indikator Koneksi Cloud di Header
+        function updateCloudStatus(connected, label) {
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            const dotMobile = document.getElementById('status-dot-mobile');
+            const textMobile = document.getElementById('status-text-mobile');
+
+            if (connected) {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]';
+                text.textContent = label || 'Firestore Terhubung';
+                dotMobile.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                textMobile.textContent = 'Online';
+            } else {
+                dot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
+                text.textContent = label || 'Offline Mode';
+                dotMobile.className = 'w-2 h-2 rounded-full bg-rose-500';
+                textMobile.textContent = 'Offline';
+            }
+        }
+
+        // 4. Inisialisasi Firebase & Autentikasi (Rule 3: Auth Before Queries)
+        async function initCloudApp() {
+            if (!firebaseConfig) {
+                updateCloudStatus(false, 'Config Tidak Ditemukan');
+                document.getElementById('loading-state').classList.add('hidden');
+                showToast('Konfigurasi cloud tidak tersedia di environment ini.', 'error');
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autentikasi wajib diselesaikan terlebih dahulu
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUser = user;
+                        document.getElementById('footer-uid').textContent = user.uid;
+                        updateCloudStatus(true, 'Cloud Firestore Aktif');
+                        subscribeToInventory();
+                    }
+                });
+            } catch (error) {
+                console.error("Kesalahan inisialisasi Firebase:", error);
+                updateCloudStatus(false, 'Gagal Koneksi');
+                document.getElementById('loading-state').classList.add('hidden');
+                showToast('Gagal terhubung ke layanan Firebase: ' + error.message, 'error');
+            }
+        }
+
+        // 5. Real-time Listener Firestore (Rule 1: Strict Path & Rule 2: Simple Query)
+        function subscribeToInventory() {
+            if (!currentUser || !db) return;
+
+            // Menggunakan path publik terstandar agar kolaboratif antar pengguna lab
+            const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'netlab_devices');
+
+            if (unsubscribeSnapshot) unsubscribeSnapshot();
+
+            unsubscribeSnapshot = onSnapshot(
+                inventoryRef,
+                async (snapshot) => {
+                    document.getElementById('loading-state').classList.add('hidden');
+                    
+                    const items = [];
+                    snapshot.forEach((docSnap) => {
+                        items.push({ id: docSnap.id, ...docSnap.data() });
+                    });
+
+                    // Urutkan di memori JavaScript berdasarkan waktu dibuat terbaru (Rule 2)
+                    items.sort((a, b) => {
+                        const timeA = a.createdAt?.seconds || 0;
+                        const timeB = b.createdAt?.seconds || 0;
+                        return timeB - timeA;
+                    });
+
+                    devicesList = items;
+
+                    // Jika database benar-benar kosong pada kunjungan pertama, isi otomatis dengan data contoh
+                    if (devicesList.length === 0 && !isSeedAttempted) {
+                        isSeedAttempted = true;
+                        await window.seedSampleData(false);
+                        return;
+                    }
+
+                    updateDashboardStats();
+                    renderInventory();
+                },
+                (error) => {
+                    console.error("Firestore onSnapshot error:", error);
+                    document.getElementById('loading-state').classList.add('hidden');
+                    updateCloudStatus(false, 'Error Sinkronisasi');
+                    showToast('Gagal membaca data cloud: ' + error.message, 'error');
+                }
+            );
+        }
+
+        // 6. Fungsi Seed Data Contoh Lab
+        window.seedSampleData = async function(manualTrigger = false) {
+            if (!currentUser || !db) {
+                showToast('Koneksi cloud belum siap.', 'error');
+                return;
+            }
+
+            try {
+                const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'netlab_devices');
+                for (const item of SAMPLE_DEVICES) {
+                    await addDoc(inventoryRef, {
+                        ...item,
+                        createdBy: currentUser.uid,
+                        createdAt: serverTimestamp()
+                    });
+                }
+                if (manualTrigger) {
+                    showToast('6 perangkat contoh lab berhasil ditambahkan ke Cloud!', 'success');
+                } else {
+                    showToast('Database awal diinisialisasi dengan 6 perangkat lab contoh.', 'info');
+                }
+            } catch (err) {
+                console.error("Gagal menambahkan data contoh:", err);
+                showToast('Gagal memuat data contoh: ' + err.message, 'error');
+            }
+        };
+
+        // 7. Tambah Perangkat Baru (CREATE)
+        document.getElementById('add-device-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentUser || !db) {
+                showToast('Autentikasi cloud belum selesai, silakan tunggu.', 'error');
+                return;
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            const originalHTML = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Menyimpan...</span>`;
+            lucide.createIcons({ root: submitBtn });
+
+            const newDevice = {
+                name: document.getElementById('device-name').value.trim(),
+                category: document.getElementById('device-category').value,
+                serial: document.getElementById('device-serial').value.trim(),
+                location: document.getElementById('device-location').value.trim(),
+                status: document.getElementById('device-status').value,
+                note: document.getElementById('device-note').value.trim() || '-',
+                createdBy: currentUser.uid,
+                createdAt: serverTimestamp()
+            };
+
+            try {
+                const inventoryRef = collection(db, 'artifacts', appId, 'public', 'data', 'netlab_devices');
+                await addDoc(inventoryRef, newDevice);
+                
+                document.getElementById('add-device-form').reset();
+                showToast(`Perangkat "${newDevice.name}" berhasil disimpan ke Firestore!`, 'success');
+            } catch (error) {
+                console.error("Gagal menyimpan perangkat:", error);
+                showToast('Gagal menyimpan data: ' + error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHTML;
+                lucide.createIcons({ root: submitBtn });
+            }
+        });
+
+        // 8. Update Statistik Dashboard
+        function updateDashboardStats() {
+            const total = devicesList.length;
+            const available = devicesList.filter(d => d.status === 'Tersedia').length;
+            const borrowed = devicesList.filter(d => d.status === 'Dipinjam').length;
+            const broken = devicesList.filter(d => d.status === 'Rusak').length;
+
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-available').textContent = available;
+            document.getElementById('stat-borrowed').textContent = borrowed;
+            document.getElementById('stat-broken').textContent = broken;
+        }
+
+        // 9. Helper Badge & Ikon Kategori
+        function getCategoryMeta(category) {
+            const map = {
+                'Router': { icon: 'router', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                'Switch': { icon: 'network', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+                'Access Point': { icon: 'wifi', color: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+                'Microcontroller ESP32': { icon: 'cpu', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                'Sensor': { icon: 'thermometer', color: 'bg-teal-50 text-teal-700 border-teal-200' },
+                'Kabel': { icon: 'cable', color: 'bg-slate-100 text-slate-700 border-slate-300' }
+            };
+            return map[category] || { icon: 'server', color: 'bg-slate-100 text-slate-700 border-slate-200' };
+        }
+
+        function getStatusBadge(status) {
+            if (status === 'Tersedia') {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Tersedia
+                </span>`;
+            } else if (status === 'Dipinjam') {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Dipinjam
+                </span>`;
+            } else {
+                return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Maintenance
+                </span>`;
+            }
+        }
+
+        // Escape HTML untuk keamanan XSS
+        function escapeHTML(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        // 10. Render Tabel (Desktop) & Kartu (Mobile) dengan Filter Real-time
+        window.renderInventory = function() {
+            const searchQuery = document.getElementById('search-input').value.toLowerCase().trim();
+            const categoryFilter = document.getElementById('filter-category').value;
+            const statusFilter = document.getElementById('filter-status').value;
+
+            const isFiltered = searchQuery !== '' || categoryFilter !== 'ALL' || statusFilter !== 'ALL';
+            document.getElementById('reset-filter-btn').classList.toggle('hidden', !isFiltered);
+
+            const filtered = devicesList.filter(item => {
+                const matchCategory = categoryFilter === 'ALL' || item.category === categoryFilter;
+                const matchStatus = statusFilter === 'ALL' || item.status === statusFilter;
+                const matchSearch = !searchQuery || 
+                    (item.name && item.name.toLowerCase().includes(searchQuery)) ||
+                    (item.serial && item.serial.toLowerCase().includes(searchQuery)) ||
+                    (item.location && item.location.toLowerCase().includes(searchQuery)) ||
+                    (item.note && item.note.toLowerCase().includes(searchQuery));
+
+                return matchCategory && matchStatus && matchSearch;
+            });
+
+            document.getElementById('showing-count').textContent = filtered.length;
+
+            const emptyState = document.getElementById('empty-state');
+            const tableContainer = document.getElementById('table-container');
+            const cardsContainer = document.getElementById('cards-container');
+            const tbody = document.getElementById('inventory-table-body');
+
+            if (filtered.length === 0) {
+                emptyState.classList.remove('hidden');
+                tableContainer.classList.add('md:hidden');
+                tableContainer.classList.add('hidden');
+                cardsContainer.innerHTML = '';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            tableContainer.classList.remove('hidden');
+            tableContainer.classList.add('md:block');
+
+            // Render Desktop Rows
+            tbody.innerHTML = filtered.map(item => {
+                const cat = getCategoryMeta(item.category);
+                return `
+                    <tr class="hover:bg-slate-50/90 transition group">
+                        <td class="py-3.5 px-4 align-top">
+                            <div class="font-bold text-slate-900 text-sm">${escapeHTML(item.name)}</div>
+                            <span class="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${cat.color}">
+                                <i data-lucide="${cat.icon}" class="w-3 h-3"></i>
+                                ${escapeHTML(item.category)}
+                            </span>
+                        </td>
+                        <td class="py-3.5 px-4 align-top">
+                            <div class="font-mono text-xs text-slate-700 bg-slate-100 px-2 py-0.5 rounded inline-block border border-slate-200">
+                                ${escapeHTML(item.serial)}
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1 flex items-center gap-1">
+                                <i data-lucide="map-pin" class="w-3 h-3 text-slate-400 shrink-0"></i>
+                                <span>${escapeHTML(item.location)}</span>
+                            </div>
+                        </td>
+                        <td class="py-3.5 px-4 align-top">
+                            ${getStatusBadge(item.status)}
+                        </td>
+                        <td class="py-3.5 px-4 align-top">
+                            <p class="text-xs text-slate-600 max-w-xs leading-relaxed">${escapeHTML(item.note)}</p>
+                        </td>
+                        <td class="py-3.5 px-4 align-top text-right whitespace-nowrap">
+                            <div class="inline-flex items-center gap-1.5">
+                                <button onclick="openStatusModal('${item.id}')" title="Ubah Status / Pinjam / Kembalikan"
+                                    class="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded-lg text-xs font-semibold transition inline-flex items-center gap-1 cursor-pointer">
+                                    <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+                                    <span>Status</span>
+                                </button>
+                                <button onclick="confirmDeleteDevice('${item.id}', '${escapeHTML(item.name).replace(/'/g, "\\'")}')" title="Hapus Perangkat"
+                                    class="p-1.5 bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white rounded-lg transition cursor-pointer">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Render Mobile Cards
+            cardsContainer.innerHTML = filtered.map(item => {
+                const cat = getCategoryMeta(item.category);
+                return `
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-3">
+                        <div class="flex items-start justify-between gap-2">
+                            <div>
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${cat.color} mb-1.5">
+                                    <i data-lucide="${cat.icon}" class="w-3 h-3"></i>
+                                    ${escapeHTML(item.category)}
+                                </span>
+                                <h4 class="font-bold text-slate-900 text-sm leading-snug">${escapeHTML(item.name)}</h4>
+                            </div>
+                            ${getStatusBadge(item.status)}
+                        </div>
+
+                        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 space-y-1 text-xs">
+                            <div class="font-mono text-slate-700">SN/MAC: <strong>${escapeHTML(item.serial)}</strong></div>
+                            <div class="text-slate-600 flex items-center gap-1">
+                                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-400"></i>
+                                <span>${escapeHTML(item.location)}</span>
+                            </div>
+                            <div class="text-slate-600 flex items-start gap-1 pt-0.5">
+                                <i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0"></i>
+                                <span>${escapeHTML(item.note)}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-end gap-2 pt-1">
+                            <button onclick="openStatusModal('${item.id}')" 
+                                class="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1.5">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                                <span>Ubah Status / Peminjam</span>
+                            </button>
+                            <button onclick="confirmDeleteDevice('${item.id}', '${escapeHTML(item.name).replace(/'/g, "\\'")}')" 
+                                class="py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-semibold text-xs rounded-xl transition flex items-center justify-center gap-1">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            lucide.createIcons();
+        };
+
+        // Event Listeners untuk Search & Filter
+        document.getElementById('search-input').addEventListener('input', window.renderInventory);
+        document.getElementById('filter-category').addEventListener('change', window.renderInventory);
+        document.getElementById('filter-status').addEventListener('change', window.renderInventory);
+
+        window.resetFilters = function() {
+            document.getElementById('search-input').value = '';
+            document.getElementById('filter-category').value = 'ALL';
+            document.getElementById('filter-status').value = 'ALL';
+            window.renderInventory();
+        };
+
+        // 11. Modal Ubah Status Cepat (UPDATE)
+        window.openStatusModal = function(deviceId) {
+            const device = devicesList.find(d => d.id === deviceId);
+            if (!device) return;
+
+            document.getElementById('edit-device-id').value = device.id;
+            document.getElementById('edit-device-name').textContent = device.name;
+            document.getElementById('edit-device-serial').textContent = device.serial;
+            document.getElementById('edit-device-status').value = device.status;
+            document.getElementById('edit-device-note').value = device.note === '-' ? '' : device.note;
+
+            const modal = document.getElementById('status-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.closeStatusModal = function() {
+            const modal = document.getElementById('status-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        };
+
+        document.getElementById('status-update-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!currentUser || !db) return;
+
+            const id = document.getElementById('edit-device-id').value;
+            const newStatus = document.getElementById('edit-device-status').value;
+            const newNote = document.getElementById('edit-device-note').value.trim() || 
+                (newStatus === 'Tersedia' ? 'Dikembalikan ke rak laboratorium (Siap pakai)' : '-');
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'netlab_devices', id);
+                await updateDoc(docRef, {
+                    status: newStatus,
+                    note: newNote,
+                    updatedAt: serverTimestamp()
+                });
+                closeStatusModal();
+                showToast(`Status perangkat diperbarui menjadi "${newStatus}"!`, 'success');
+            } catch (error) {
+                console.error("Gagal memperbarui status:", error);
+                showToast('Gagal memperbarui status: ' + error.message, 'error');
+            }
+        });
+
+        // 12. Konfirmasi Hapus Custom Modal (DELETE)
+        let pendingDeleteId = null;
+
+        window.confirmDeleteDevice = function(deviceId, deviceName) {
+            pendingDeleteId = deviceId;
+            document.getElementById('confirm-title').textContent = 'Hapus Perangkat Inventaris?';
+            document.getElementById('confirm-message').innerHTML = 
+                `Anda akan menghapus <strong>"${deviceName}"</strong> secara permanen dari database Cloud Firestore. Lanjutkan?`;
+            
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        document.getElementById('confirm-cancel-btn').addEventListener('click', () => {
+            pendingDeleteId = null;
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        });
+
+        document.getElementById('confirm-ok-btn').addEventListener('click', async () => {
+            if (!pendingDeleteId || !currentUser || !db) return;
+            const idToDelete = pendingDeleteId;
+            pendingDeleteId = null;
+
+            const modal = document.getElementById('confirm-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'netlab_devices', idToDelete);
+                await deleteDoc(docRef);
+                showToast('Data perangkat berhasil dihapus dari Cloud.', 'info');
+            } catch (error) {
+                console.error("Gagal menghapus data:", error);
+                showToast('Gagal menghapus data: ' + error.message, 'error');
+            }
+        });
+
+        // 13. Navigasi Tab (Inventaris vs Dokumentasi Arsitektur UTS)
+        window.switchTab = function(tabName) {
+            const invView = document.getElementById('view-inventory');
+            const archView = document.getElementById('view-architecture');
+            const btnInv = document.getElementById('tab-btn-inventory');
+            const btnArch = document.getElementById('tab-btn-architecture');
+
+            if (tabName === 'inventory') {
+                invView.classList.remove('hidden');
+                archView.classList.add('hidden');
+                btnInv.className = 'flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-blue-600 text-white shadow';
+                btnArch.className = 'flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-300 hover:text-white';
+            } else {
+                invView.classList.add('hidden');
+                archView.classList.remove('hidden');
+                btnArch.className = 'flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all bg-emerald-600 text-white shadow';
+                btnInv.className = 'flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all text-slate-300 hover:text-white';
+            }
+            lucide.createIcons();
+        };
+
+        // Jalankan Aplikasi saat DOM siap
+        initCloudApp();
+    </script>
+</body>
+</html>
